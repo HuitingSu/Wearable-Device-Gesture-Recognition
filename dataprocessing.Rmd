@@ -1,0 +1,150 @@
+---
+title: "Gesture Classification Data Processing"
+output: html_document
+---
+## Input data processing
+Split data and make images
+```{r read, ache = TRUE}
+setwd("E:/_MS 17Fall/Project/data")
+ok1 <- read.csv("ok-1_index.csv")
+ok2 <- read.csv("ok-2_index.csv")
+ok3 <- read.csv("ok-3_index.csv")
+ok <- rbind(ok1, ok2, ok3)
+colnames(ok)<-c("Time", "Current", "Index")
+
+wave1 <- read.csv("wave-1_index.csv")
+wave2 <- read.csv("wave-2_index.csv")
+wave3 <- read.csv("wave-3_index.csv")
+wave <- rbind(wave1, wave2, wave3)
+colnames(wave)<-c("Time", "Current", "Index")
+```
+
+```{r makeimage}
+library(dplyr)
+plot.window(c(0,1),c(0,1), xaxs = "i", yaxs = "i")
+for (i in 1:14) 
+{  
+    oki <- filter(ok, Index==i)
+    jpeg(paste("ok", i, ".jpg", sep = ""), height=28,width =28,units = "px")
+    op <- par(mar = rep(0, 4))
+    plot(oki$Time,oki$Current,type = "l")
+    par(op)
+    dev.off()
+}
+```
+
+```{r waveimage}
+library(dplyr)
+plot.window(c(0,1),c(0,1), xaxs = "i", yaxs = "i")
+for (i in 1:28) 
+{  
+    if(i==26)  #26,29,30 are flawed
+        next
+    wavei <- filter(wave, Index==i)
+    jpeg(paste("wave", i, ".jpg", sep = ""),height=28,width =28,units = "px")
+    op <- par(mar = rep(0, 4))
+    plot(wavei$Time,wavei$Current,type = "l")
+    par(op)
+    dev.off()
+}
+```
+
+## Transfer from image to Greyscale matrix
+This two code trunks below is revised from work by Mic.
+```{r data}
+rm(list=ls())
+require(EBImage)
+
+
+setwd("E://_MS 17Fall/Project/data/testok")
+save_in <- "E://_MS 17Fall/Project/data/testout"
+# Load images names
+images <- list.files()
+
+w <- 28
+h <- 28
+
+# Main loop resize images and set them to greyscale
+for(i in 1:length(images))
+{
+    result <- tryCatch({
+    imgname <- images[i]
+    img <- readImage(imgname)
+    # Resize image 28x28
+    img_resized <- resize(img, w = w, h = h)
+    grayimg <- channel(img_resized,"gray")
+    path <- paste(save_in, imgname, sep = "")
+    writeImage(grayimg, path, quality = 70)
+    # Print status
+    print(paste("Done",i,sep = " "))},
+    # Error function
+    error = function(e){print(e)})
+}
+```
+
+```{r}
+rm(list=ls())
+require(EBImage)
+
+# Set wd where resized greyscale images are located
+setwd("E://_MS 17Fall/Project/data/testoutwave")
+
+# Out file
+out_file <- "E://_MS 17Fall/Project/data/testoutwave/waves_28.csv"
+
+# List images in path
+images <- list.files()
+
+# Set up df
+df <- data.frame()
+
+# Set image size. In this case 28x28
+img_size <- 28*28
+
+# Set label
+label <- 1
+
+# Main loop. Loop over each image
+for(i in 1:length(images))
+{
+    # Read image
+    img <- readImage(images[i])
+    # Get the image as a matrix
+    img_matrix <- img@.Data
+    # Coerce to a vector
+    img_vector <- as.vector(t(img_matrix))
+    # Add label
+    vec <- c(label, img_vector)
+    # Bind rows
+    df <- rbind(df,vec)
+    # Print status info
+    print(paste("Done ", i, sep = ""))
+}
+
+# Set names
+names(df) <- c("label", paste("pixel", c(1:img_size)))
+
+# Write out dataset
+write.csv(df, out_file, row.names = FALSE)
+```
+
+
+## Split data into Training set and Testing set
+```{r}
+# Load datasets
+setwd("E://_MS 17Fall/Project/data")
+oks <- read.csv("oks_28.csv")
+waves <- read.csv("waves_28.csv")
+
+new <- rbind(oks, waves)
+shuffled <- new[sample(1:41),]
+
+# Split into training set and testing set
+train_28 <- shuffled[1:30,]
+test_28 <- shuffled[31:41,]
+
+write.csv(train_28, "train_28.csv",row.names = FALSE)
+write.csv(test_28, "test_28.csv",row.names = FALSE)
+```
+
+

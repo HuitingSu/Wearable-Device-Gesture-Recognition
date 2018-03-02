@@ -1,0 +1,116 @@
+---
+title: "Neural Network"
+output: html_document
+---
+
+##Linear Regression
+```{r OLS}
+train <- as.data.frame(train)
+lm_result <- glm(label~., data=train)
+pr.lm <- predict(lm_result,test)
+MSE.lm <- sum((pr.lm - test$label)^2)/nrow(test)
+```
+
+
+## Install mxnet
+```{r mxnet}
+library(mxnet)
+a <- mx.nd.ones(c(2,3), ctx = mx.cpu())
+```
+
+## Following code is revised from Work by Mic
+```{r}
+rm(list=ls())
+
+# Load MXNet
+require(mxnet)
+
+train <- read.csv("train_28.csv")
+test <- read.csv("test_28.csv")
+
+# Set up train and test datasets
+train <- data.matrix(train)
+train_x <- t(train[, -1])
+train_y <- train[, 1]
+train_array <- train_x
+dim(train_array) <- c(28, 28, 1, ncol(train_x))
+
+test_x <- t(test[, -1])
+test_y <- test[, 1]
+test_array <- test_x
+dim(test_array) <- c(28, 28, 1, ncol(test_x))
+
+# Set up the symbolic model
+
+data <- mx.symbol.Variable('data')
+# 1st convolutional layer
+conv_1 <- mx.symbol.Convolution(data = data, kernel = c(5, 5), num_filter = 20)
+tanh_1 <- mx.symbol.Activation(data = conv_1, act_type = "tanh")
+pool_1 <- mx.symbol.Pooling(data = tanh_1, pool_type = "max", kernel = c(2, 2), stride = c(2, 2))
+# 2nd convolutional layer
+conv_2 <- mx.symbol.Convolution(data = pool_1, kernel = c(5, 5), num_filter = 50)
+tanh_2 <- mx.symbol.Activation(data = conv_2, act_type = "tanh")
+pool_2 <- mx.symbol.Pooling(data=tanh_2, pool_type = "max", kernel = c(2, 2), stride = c(2, 2))
+# 1st fully connected layer
+flatten <- mx.symbol.Flatten(data = pool_2)
+fc_1 <- mx.symbol.FullyConnected(data = flatten, num_hidden = 500)
+tanh_3 <- mx.symbol.Activation(data = fc_1, act_type = "tanh")
+# 2nd fully connected layer
+fc_2 <- mx.symbol.FullyConnected(data = tanh_3, num_hidden = 40)
+# Output. Softmax output since we'd like to get some probabilities.
+NN_model <- mx.symbol.SoftmaxOutput(data = fc_2)
+
+
+# Set seed for reproducibility
+mx.set.seed(100)
+
+# Device used. CPU in my case.
+devices <- mx.cpu()
+
+# Training
+model <- mx.model.FeedForward.create(NN_model,
+                                     X = train_array,
+                                     y = train_y,
+                                     ctx = devices,
+                                     num.round = 480,
+                                     array.batch.size = 40,
+                                     learning.rate = 0.01,
+                                     momentum = 0.9,
+                                     eval.metric = mx.metric.accuracy,
+                                     epoch.end.callback = mx.callback.log.train.metric(100))
+```
+
+## Predict labels and Get accuracy
+```{r test}
+predicted <- predict(model, test_array)
+predicted_labels <- max.col(t(predicted)) - 1
+sum(diag(table(test[, 1], predicted_labels)))/11
+```
+
+## Cross Validation and Parameters Tuning
+```{r}
+library(caret)
+library(e1071)
+# define training control
+train_control <- trainControl(method="cv", number=10)
+# fix the parameters of the algorithm
+grid <- expand.grid(layer1=300,layer2=100,layer3=10,learning.rate=c(0.1,0.01,0.001), momentum=c(0,0.9), dropout=c('training'), activation=c('tanh'))
+# train the model
+cvdata <- rbind(train, test)
+cvdata$label <- as.factor(cvdata$label)
+model <- train(label~., data=cvdata, trControl=train_control, method="mxnet", tuneGrid=grid)
+# summarize results
+print(model)
+```
+
+
+```{r}
+library(neuralnet)
+library(dplyr)
+n <- colnames(train)
+f <-as.formula(paste("label ~", paste(n[!n %in% "label"], collapse = " + ")))
+nn <- neuralnet(f,data=train,hidden=c(5,3),linear.output=FALSE)
+#jpeg("neuralnet.jpg")
+#plot(nn)
+#dev.off()
+```
